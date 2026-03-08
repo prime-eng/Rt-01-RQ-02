@@ -32,15 +32,36 @@ with col_head2:
 
 st.markdown("---")
 
-# --- METRIC & DATA ---
+# --- FITUR PENCARIAN WARGA ---
+st.markdown("### 🔍 Pencarian Cepat Warga")
+search_query = st.text_input("Cari Nama Lengkap atau No KK:", placeholder="Masukkan nama atau 16 digit No KK...")
+
 conn = create_connection()
 try:
-    df_warga = pd.read_sql("SELECT * FROM warga WHERE status = 'Aktif'", conn)
+    # Load semua data untuk pencarian dan metrik
+    df_warga_all = pd.read_sql("SELECT * FROM warga", conn)
+    df_warga_aktif = df_warga_all[df_warga_all['status'] == 'Aktif']
     df_kas = pd.read_sql("SELECT * FROM kas", conn)
+
+    # Logika Pencarian
+    if search_query:
+        # Filter berdasarkan nama (case-insensitive) atau No KK
+        hasil_cari = df_warga_all[
+            (df_warga_all['nama'].str.contains(search_query, case=False, na=False)) |
+            (df_warga_all['no_kk'].str.contains(search_query, na=False))
+        ]
+        
+        if not hasil_cari.empty:
+            st.success(f"Ditemukan {len(hasil_cari)} data:")
+            st.dataframe(hasil_cari[['no_kk', 'nama', 'tipe_kk', 'status', 'alamat']], use_container_width=True)
+        else:
+            st.warning("Data warga tidak ditemukan.")
     
+    st.markdown("---")
+
+    # --- METRIC & DATA ---
     # Perhitungan Saldo Akurat
     if not df_kas.empty:
-        # Pastikan kolom tipe ada, jika tidak, anggap semua masuk
         total_masuk = df_kas[df_kas['tipe'] == 'Kas Masuk']['jumlah'].sum() if 'tipe' in df_kas.columns else df_kas['jumlah'].sum()
         total_keluar = df_kas[df_kas['tipe'] == 'Kas Keluar']['jumlah'].sum() if 'tipe' in df_kas.columns else 0
         saldo_akhir = total_masuk - total_keluar
@@ -48,7 +69,7 @@ try:
         total_masuk, total_keluar, saldo_akhir = 0, 0, 0
     
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Warga", f"{len(df_warga)} Jiwa")
+    c1.metric("Total Warga (Aktif)", f"{len(df_warga_aktif)} Jiwa")
     c2.metric("Kas Masuk", f"Rp {total_masuk:,.0f}")
     c3.metric("Kas Keluar", f"Rp {total_keluar:,.0f}")
     c4.metric("Saldo Akhir", f"Rp {saldo_akhir:,.0f}")
@@ -63,16 +84,10 @@ st.markdown("---")
 # --- AKTIVITAS TERBARU ---
 st.markdown("### 📋 5 Transaksi Keuangan Terakhir")
 if not df_kas.empty:
-    # Memilih kolom yang ingin ditampilkan agar lebih rapi
     cols_to_show = ['tanggal', 'keterangan', 'tipe', 'jumlah', 'penanggung_jawab']
-    # Filter kolom yang ada di DataFrame agar tidak error jika ada kolom yang belum terisi
     existing_cols = [c for c in cols_to_show if c in df_kas.columns]
-    
     df_display = df_kas[existing_cols].sort_values(by='tanggal', ascending=False).head(5)
-    
-    # Ganti nilai kosong agar lebih readable
     df_display = df_display.fillna('-')
-    
     st.dataframe(df_display, use_container_width=True)
 else:
     st.info("Belum ada data transaksi.")
